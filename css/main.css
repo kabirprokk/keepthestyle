@@ -176,3 +176,39 @@ body {
 .select:focus {
     border-color: var(--color-accent);
 }
+/* Keyboard shortcut hints */
+.shortcut-hint {
+    font-size: 10px;
+    color: var(--color-dark-gray);
+    background: var(--color-light-gray);
+    padding: 1px 6px;
+    border-radius: 3px;
+    margin-left: 4px;
+    font-weight: 400;
+}
+
+/* Dark Mode styles */
+body.dark-mode {
+    --color-white: #1A1A1A;
+    --color-light-gray: #242424;
+    --color-gray: #333333;
+    --color-dark-gray: #888888;
+    --color-border: #333333;
+    --color-black: #EEEEEE;
+}
+
+body.dark-mode .code-editor {
+    background: #0D0D0D;
+}
+
+body.dark-mode .code-editor code {
+    color: #EEEEEE;
+}
+
+body.dark-mode .canvas-page {
+    background: #FFFFFF;
+}
+
+body.dark-mode .canvas-wrapper {
+    background: #1A1A1A;
+}
