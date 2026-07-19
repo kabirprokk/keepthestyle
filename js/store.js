@@ -1,6 +1,6 @@
 /**
  * KeepTheStyle - Application State Management
- * Central store for all application data
+ * Central store for all application data with real-time updates
  */
 
 class Store {
@@ -23,7 +23,8 @@ class Store {
             projectName: 'Untitled Project',
             isDragging: false,
             dragOffset: { x: 0, y: 0 },
-            selectedTool: 'select'
+            selectedTool: 'select',
+            lastUpdate: Date.now()
         };
 
         this.listeners = [];
@@ -35,20 +36,28 @@ class Store {
         this.loadFromStorage();
         
         // Auto-save every 5 seconds
-        setInterval(() => this.saveToStorage(), 5000);
+        this.autoSaveInterval = setInterval(() => this.saveToStorage(), 5000);
     }
 
     // Subscribe to state changes
     subscribe(listener) {
         this.listeners.push(listener);
+        // Call listener immediately with current state
+        listener(this.state);
         return () => {
             this.listeners = this.listeners.filter(l => l !== listener);
         };
     }
 
-    // Notify all listeners of state change
+    // Notify all listeners of state change in real-time
     notify() {
-        this.listeners.forEach(listener => listener(this.state));
+        this.listeners.forEach(listener => {
+            try {
+                listener(this.state);
+            } catch (e) {
+                console.error('Error in store listener:', e);
+            }
+        });
     }
 
     // Get current state
@@ -56,10 +65,11 @@ class Store {
         return this.state;
     }
 
-    // Update state
+    // Update state with real-time notification
     setState(newState) {
         const oldState = { ...this.state };
         this.state = { ...this.state, ...newState };
+        this.state.lastUpdate = Date.now();
         
         // Save to history if significant change
         if (this.shouldSaveHistory(oldState, this.state)) {
@@ -67,15 +77,15 @@ class Store {
         }
         
         this.notify();
+        this.saveToStorage();
     }
 
     // Check if state change should be saved to history
     shouldSaveHistory(oldState, newState) {
         // Compare elements array for changes
-        if (oldState.elements !== newState.elements) {
+        if (JSON.stringify(oldState.elements) !== JSON.stringify(newState.elements)) {
             return true;
         }
-        // Add more conditions as needed
         return false;
     }
 
@@ -103,7 +113,9 @@ class Store {
             this.state.historyIndex--;
             const snapshot = this.state.history[this.state.historyIndex];
             this.state.elements = JSON.parse(snapshot);
+            this.state.lastUpdate = Date.now();
             this.notify();
+            this.saveToStorage();
             return true;
         }
         return false;
@@ -114,30 +126,40 @@ class Store {
             this.state.historyIndex++;
             const snapshot = this.state.history[this.state.historyIndex];
             this.state.elements = JSON.parse(snapshot);
+            this.state.lastUpdate = Date.now();
             this.notify();
+            this.saveToStorage();
             return true;
         }
         return false;
     }
 
     // Element operations
-    addElement(element) {
-        this.state.elements.push({
-            ...element,
+    addElement(elementData) {
+        const element = {
+            ...elementData,
             id: this.generateId(),
-            position: { x: 100, y: 100 },
-            size: { width: 200, height: 150 },
-            styles: {},
-            children: []
-        });
+            position: elementData.position || { x: 100, y: 100 },
+            size: elementData.size || { width: 200, height: 150 },
+            styles: elementData.styles || {},
+            content: elementData.content || '',
+            attributes: elementData.attributes || {},
+            children: elementData.children || []
+        };
+        this.state.elements.push(element);
+        this.state.selectedElements = [element.id];
+        this.saveHistory();
         this.notify();
+        this.saveToStorage();
         return element;
     }
 
     deleteElement(id) {
         this.state.elements = this.state.elements.filter(el => el.id !== id);
         this.state.selectedElements = this.state.selectedElements.filter(sid => sid !== id);
+        this.saveHistory();
         this.notify();
+        this.saveToStorage();
     }
 
     updateElement(id, updates) {
@@ -145,6 +167,7 @@ class Store {
         if (element) {
             Object.assign(element, updates);
             this.notify();
+            this.saveToStorage();
         }
     }
 
@@ -168,17 +191,19 @@ class Store {
     duplicateElement(id) {
         const element = this.state.elements.find(el => el.id === id);
         if (element) {
-            const newElement = {
+            const newElement = deepClone({
                 ...element,
                 id: this.generateId(),
                 position: {
                     x: element.position.x + 20,
                     y: element.position.y + 20
                 }
-            };
+            });
             this.state.elements.push(newElement);
             this.state.selectedElements = [newElement.id];
+            this.saveHistory();
             this.notify();
+            this.saveToStorage();
         }
     }
 
@@ -192,7 +217,8 @@ class Store {
             const data = {
                 elements: this.state.elements,
                 projectName: this.state.projectName,
-                pageSize: this.state.pageSize
+                pageSize: this.state.pageSize,
+                lastUpdate: this.state.lastUpdate
             };
             localStorage.setItem('keepthestyle_project', JSON.stringify(data));
         } catch (e) {
@@ -232,10 +258,17 @@ class Store {
             this.state.pageSize = data.pageSize || { width: 1920, height: 1080 };
             this.saveHistory();
             this.notify();
+            this.saveToStorage();
             return true;
         } catch (e) {
             console.error('Failed to import project:', e);
             return false;
+        }
+    }
+
+    destroy() {
+        if (this.autoSaveInterval) {
+            clearInterval(this.autoSaveInterval);
         }
     }
 }
